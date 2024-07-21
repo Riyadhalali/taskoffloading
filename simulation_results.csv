@@ -1,0 +1,11 @@
+Device,Start Time,End Time,Duration,Type
+EdgeServer 0,0,9,9,Offloaded
+EdgeServer 0,13,18,3,Offloaded
+EdgeServer 1,0,8,8,Offloaded
+EdgeServer 1,10,15,5,Offloaded
+EdgeServer 2,0,9,1,Offloaded
+EdgeServer 1,0,8,8,Processed
+EdgeServer 0,0,9,9,Processed
+EdgeServer 2,8,9,1,Processed
+EdgeServer 1,10,15,5,Processed
+EdgeServer 0,15,18,3,Processed
