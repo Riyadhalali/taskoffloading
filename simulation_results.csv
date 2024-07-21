@@ -1,4 +1,10 @@
-Device,Start Time,End Time,Duration,Complexity,Type,Processing Time
-EdgeServer,0.0,6.25,5,5,Local,6.25
-EdgeServer,6.25,10.416666666666668,5,5,Offloaded,4.166666666666668
-EdgeServer,6.25,10.416666666666668,5,5,Cloud,4.166666666666668
+Device,Start Time,End Time,Duration,Complexity,Priority,Type,Processing Time
+EdgeServer,0.0,2.25,3,3,1,Local,2.25
+EdgeServer,2.5,8.75,5,5,2,Local,6.25
+EdgeServer,9.444444444444445,21.694444444444443,7,7,3,Local,12.249999999999998
+EdgeServer,2.25,2.5,3,3,1,Offloaded,0.25
+EdgeServer,8.75,9.444444444444445,5,5,2,Offloaded,0.6944444444444446
+EdgeServer,21.694444444444443,23.055555555555554,7,7,3,Offloaded,1.3611111111111107
+EdgeServer,2.25,2.5,3,3,1,Cloud,0.25
+EdgeServer,8.75,9.444444444444445,5,5,2,Cloud,0.6944444444444446
+EdgeServer,21.694444444444443,23.055555555555554,7,7,3,Cloud,1.3611111111111107
