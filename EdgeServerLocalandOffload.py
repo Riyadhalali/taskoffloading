@@ -2,7 +2,7 @@ import simpy
 import pandas as pd
 import heapq
 
-
+# compare between task execution on cloud and local with task priority
 class Task:
     def __init__(self, duration, complexity, priority):
         self.duration = duration
@@ -79,7 +79,7 @@ class CloudEnvironment:
 env = simpy.Environment()
 
 # Create cloud environment with specified capabilities
-cloud_env = CloudEnvironment(env, num_servers=1, cpu_power=12.0, memory=32)
+cloud_env = CloudEnvironment(env, num_servers=1, cpu_power=3.0, memory=16)
 
 # Create edge server with specified capabilities
 edge_server = EdgeServer(env, 'EdgeServer', cloud_env, cpu_power=2.0, memory=8)
