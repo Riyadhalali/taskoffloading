@@ -3,6 +3,8 @@ import pandas as pd
 import heapq
 import random
 
+
+# TASK OFFLOADING BASED CURRENT LOAD OF EDGE SERVER AND IF EDGESERVER REJECT TASK TO CAN BE OFFLOADED
 class Network:
     def __init__(self, env):
         self.env = env
@@ -60,10 +62,10 @@ class EdgeServer:
                 task = heapq.heappop(self.task_queue)
                 self.current_tasks -= 1
 
-                if self.current_load >= self.max_load or self.should_offload(task):
+                if self.should_offload(task):
                     self.env.process(self.offload_to_cloud(task))
                 else:
-                    self.env.process(self.process_locally(task))
+                    self.process_locally(task)
             else:
                 yield self.env.timeout(1)
 
@@ -86,7 +88,6 @@ class EdgeServer:
         self.current_load -= task.complexity
         end_time = self.env.now
         self.local_tasks.append((start_time, end_time, task.duration, task.complexity, task.priority, 'Local'))
-        print(f'{self.name} completed local task (priority {task.priority}, complexity {task.complexity}) at {self.env.now}. Processing time: {end_time - start_time:.2f}')
 
     def calculate_local_processing_time(self, task):
         return (task.duration * task.complexity) / (self.cpu_power * (1 + self.memory / 10))
@@ -98,8 +99,8 @@ class EdgeServer:
         load_factor = self.current_load / self.max_load
         time_factor = (cloud_time + transfer_time) / local_time
         complexity_factor = task.complexity / 10
-        offload_score = 0.2 * time_factor + 0.3 * complexity_factor + 0.5 * load_factor
-        return offload_score > 0.8
+        offload_score = 0.3 * time_factor + 0.4 * complexity_factor + 0.3 * load_factor
+        return offload_score > 0.4
 
 class CloudEnvironment:
     def __init__(self, env, num_servers, cpu_power, memory):
@@ -130,34 +131,27 @@ class CloudEnvironment:
 env = simpy.Environment()
 
 # Create cloud environment with specified capabilities
-cloud_env = CloudEnvironment(env, num_servers=2, cpu_power=3.0, memory=16)
+cloud_env = CloudEnvironment(env, num_servers=2, cpu_power=4.0, memory=32)
 
 # Create edge server with specified capabilities and max concurrent tasks
-edge_server = EdgeServer(env, 'EdgeServer', cloud_env, cpu_power=2.0, memory=8, max_concurrent_tasks=5)
+edge_server = EdgeServer(env, 'EdgeServer', cloud_env, cpu_power=1.5, memory=4, max_concurrent_tasks=3)
 
 # Add tasks with different priorities, complexities, and data sizes
 tasks = [
-    Task(duration=5, complexity=4, priority=2, data_size=10),
-    Task(duration=3, complexity=3, priority=1, data_size=8),
-    Task(duration=7, complexity=5, priority=3, data_size=15),
-    Task(duration=4, complexity=4, priority=2, data_size=12),
-    Task(duration=6, complexity=6, priority=1, data_size=18),
-    Task(duration=5, complexity=5, priority=2, data_size=14),
-    Task(duration=4, complexity=3, priority=1, data_size=9)
-
+    Task(duration=5, complexity=8, priority=2, data_size=20),
+    Task(duration=3, complexity=6, priority=1, data_size=15),
+    Task(duration=7, complexity=9, priority=3, data_size=25),
+    Task(duration=4, complexity=7, priority=2, data_size=18),
+    Task(duration=6, complexity=8, priority=1, data_size=22),
+    Task(duration=5, complexity=7, priority=2, data_size=19),
+    Task(duration=4, complexity=5, priority=1, data_size=14)
 ]
 
 for task in tasks:
     edge_server.add_task(task)
 
 # Run the simulation
-env.run(until=1000)
-
-# Print summary of locally processed tasks
-print("\nSummary of locally processed tasks:")
-for task in edge_server.local_tasks:
-    start_time, end_time, duration, complexity, priority, _ = task
-    print(f"Priority: {priority}, Complexity: {complexity}, Processing Time: {end_time - start_time:.2f}")
+env.run(until=200)
 
 # Collect and process data
 all_data = (
@@ -173,7 +167,6 @@ df = pd.DataFrame(all_data, columns=['Device', 'Start Time', 'End Time', 'Durati
 df['Processing Time'] = df['End Time'] - df['Start Time']
 
 # Print the DataFrame
-print("\nAll tasks:")
 print(df)
 
 # Print comparison

@@ -2,6 +2,7 @@ import simpy
 import pandas as pd
 import heapq
 import random
+import numpy as np
 
 class Network:
     def __init__(self, env):
@@ -28,6 +29,32 @@ class Task:
     def __lt__(self, other):
         return self.priority < other.priority
 
+class RLAgent:
+    def __init__(self, state_size, action_size, learning_rate=0.1, discount_factor=0.95, exploration_rate=1.0, exploration_decay=0.999):
+        self.state_size = state_size
+        self.action_size = action_size
+        self.learning_rate = learning_rate
+        self.discount_factor = discount_factor
+        self.exploration_rate = exploration_rate
+        self.exploration_min = 0.01
+        self.exploration_decay = exploration_decay
+        self.q_table = np.zeros((state_size, action_size))
+
+    def get_action(self, state):
+        if np.random.rand() < self.exploration_rate:
+            return np.random.randint(self.action_size)
+        return np.argmax(self.q_table[state])
+
+    def update_q_table(self, state, action, reward, next_state):
+        current_q = self.q_table[state, action]
+        max_next_q = np.max(self.q_table[next_state])
+        new_q = current_q + self.learning_rate * (reward + self.discount_factor * max_next_q - current_q)
+        self.q_table[state, action] = new_q
+        print(f"Updated Q-value for state {state}, action {action}: {new_q:.2f}")
+
+    def decay_exploration(self):
+        self.exploration_rate = max(self.exploration_min, self.exploration_rate * self.exploration_decay)
+
 class EdgeServer:
     def __init__(self, env, name, cloud_env, cpu_power, memory, max_concurrent_tasks):
         self.env = env
@@ -44,6 +71,7 @@ class EdgeServer:
         self.max_load = cpu_power * 2
         self.max_concurrent_tasks = max_concurrent_tasks
         self.current_tasks = 0
+        self.rl_agent = RLAgent(state_size=100, action_size=2)  # Reduced state size for simplicity
 
     def add_task(self, task):
         if self.current_tasks < self.max_concurrent_tasks:
@@ -67,17 +95,40 @@ class EdgeServer:
             else:
                 yield self.env.timeout(1)
 
+    def get_state(self, task):
+        load_state = min(int(self.current_load / self.max_load * 10), 9)
+        network_state = min(int(self.network.latency / 5), 9)
+        complexity_state = min(task.complexity - 1, 9)  # Assuming complexity starts from 1
+        priority_state = min(task.priority - 1, 9)  # Assuming priority starts from 1
+        return load_state * 10 + network_state  # Simplified state representation
+
+    def should_offload(self, task):
+        state = self.get_state(task)
+        action = self.rl_agent.get_action(state)
+        print(f"Deciding for task (priority {task.priority}, complexity {task.complexity}): {'Offload' if action == 1 else 'Local'}")
+        return action == 1  # 1 for offload, 0 for local processing
+
+    def update_rl_agent(self, initial_state, action, reward, next_state):
+        self.rl_agent.update_q_table(initial_state, action, reward, next_state)
+        self.rl_agent.decay_exploration()
+
     def offload_to_cloud(self, task):
+        initial_state = self.get_state(task)
         start_time = self.env.now
         print(f'{self.name} offloading task (priority {task.priority}, complexity {task.complexity}) at {self.env.now}')
         transfer_time = self.network.transfer_time(task.data_size)
         yield self.env.timeout(transfer_time)
         yield self.env.process(self.cloud_env.process_task(task, self.name))
         end_time = self.env.now
+        processing_time = end_time - start_time
+        reward = -processing_time
+        next_state = self.get_state(task)
+        self.update_rl_agent(initial_state, 1, reward, next_state)
         self.offloaded_tasks.append(
             (start_time, end_time, task.duration, task.complexity, task.priority, 'Offloaded'))
 
     def process_locally(self, task):
+        initial_state = self.get_state(task)
         start_time = self.env.now
         print(f'{self.name} processing task (priority {task.priority}, complexity {task.complexity}) locally at {self.env.now}')
         processing_time = self.calculate_local_processing_time(task)
@@ -85,21 +136,14 @@ class EdgeServer:
         yield self.env.timeout(processing_time)
         self.current_load -= task.complexity
         end_time = self.env.now
+        reward = -(end_time - start_time)
+        next_state = self.get_state(task)
+        self.update_rl_agent(initial_state, 0, reward, next_state)
         self.local_tasks.append((start_time, end_time, task.duration, task.complexity, task.priority, 'Local'))
         print(f'{self.name} completed local task (priority {task.priority}, complexity {task.complexity}) at {self.env.now}. Processing time: {end_time - start_time:.2f}')
 
     def calculate_local_processing_time(self, task):
         return (task.duration * task.complexity) / (self.cpu_power * (1 + self.memory / 10))
-
-    def should_offload(self, task):
-        local_time = self.calculate_local_processing_time(task)
-        cloud_time = self.cloud_env.calculate_cloud_processing_time(task)
-        transfer_time = self.network.transfer_time(task.data_size) * 2
-        load_factor = self.current_load / self.max_load
-        time_factor = (cloud_time + transfer_time) / local_time
-        complexity_factor = task.complexity / 10
-        offload_score = 0.2 * time_factor + 0.3 * complexity_factor + 0.5 * load_factor
-        return offload_score > 0.8
 
 class CloudEnvironment:
     def __init__(self, env, num_servers, cpu_power, memory):
@@ -143,15 +187,14 @@ tasks = [
     Task(duration=4, complexity=4, priority=2, data_size=12),
     Task(duration=6, complexity=6, priority=1, data_size=18),
     Task(duration=5, complexity=5, priority=2, data_size=14),
-    Task(duration=4, complexity=3, priority=1, data_size=9)
-
+    Task(duration=4, complexity=3, priority=1, data_size=9),
 ]
 
 for task in tasks:
     edge_server.add_task(task)
 
 # Run the simulation
-env.run(until=1000)
+env.run(until=2000)
 
 # Print summary of locally processed tasks
 print("\nSummary of locally processed tasks:")
@@ -183,3 +226,7 @@ for _, row in df.iterrows():
 
 # Optionally, save to a CSV file
 df.to_csv('simulation_results.csv', index=False)
+
+# Print the Q-table
+print("\nQ-table:")
+print(edge_server.rl_agent.q_table)
