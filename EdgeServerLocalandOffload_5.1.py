@@ -38,7 +38,9 @@ class RLAgent:
         self.exploration_rate = exploration_rate
         self.exploration_min = 0.01
         self.exploration_decay = exploration_decay
-        self.q_table = np.zeros((state_size, action_size))
+        self.q_table = np.random.uniform(low=-1, high=1, size=(state_size, action_size))  # Initialize with random values
+
+    # ... (rest of the class remains the same)
 
     def get_action(self, state):
         if np.random.rand() < self.exploration_rate:
@@ -71,7 +73,7 @@ class EdgeServer:
         self.max_load = cpu_power * 2
         self.max_concurrent_tasks = max_concurrent_tasks
         self.current_tasks = 0
-        self.rl_agent = RLAgent(state_size=100, action_size=2)  # Reduced state size for simplicity
+        self.rl_agent = RLAgent(state_size=10000, action_size=2)  # Reduced state size for simplicity
 
     def add_task(self, task):
         if self.current_tasks < self.max_concurrent_tasks:
@@ -100,7 +102,7 @@ class EdgeServer:
         network_state = min(int(self.network.latency / 5), 9)
         complexity_state = min(task.complexity - 1, 9)  # Assuming complexity starts from 1
         priority_state = min(task.priority - 1, 9)  # Assuming priority starts from 1
-        return load_state * 10 + network_state  # Simplified state representation
+        return load_state * 1000 + network_state * 100 + complexity_state * 10 + priority_state
 
     def should_offload(self, task):
         state = self.get_state(task)
@@ -204,9 +206,8 @@ for task in edge_server.local_tasks:
 
 # Collect and process data
 all_data = (
-        [(edge_server.name, *task) for task in edge_server.local_tasks] +
-        [(edge_server.name, *task) for task in edge_server.offloaded_tasks] +
-        [task for task in cloud_env.processed_tasks]
+    [(edge_server.name, *task) for task in edge_server.local_tasks] +
+    [task for task in cloud_env.processed_tasks]
 )
 
 # Create a DataFrame
@@ -224,9 +225,14 @@ print("\nComparison of processing times:")
 for _, row in df.iterrows():
     print(f"Type: {row['Type']}, Priority: {row['Priority']}, Complexity: {row['Complexity']}, Processing Time: {row['Processing Time']}")
 
+
+
 # Optionally, save to a CSV file
 df.to_csv('simulation_results.csv', index=False)
 
 # Print the Q-table
 print("\nQ-table:")
-print(edge_server.rl_agent.q_table)
+non_zero = np.count_nonzero(edge_server.rl_agent.q_table)
+print(f"Number of non-zero elements in Q-table: {non_zero}")
+print("Sample of Q-table (first 10 rows, all columns):")
+print(edge_server.rl_agent.q_table[:10])

@@ -1,46 +1,48 @@
+# Install necessary libraries
 import pandas as pd
+import seaborn as sns
 import matplotlib.pyplot as plt
-import numpy as np
 
-# Recreate the DataFrame from the output
-data = [
-    ['EdgeServer', 0.00, 2.250000, 3, 3, 1, 'Local', 2.250000],
-    ['EdgeServer', 2.25, 8.500000, 5, 5, 2, 'Local', 6.250000],
-    ['EdgeServer', 8.50, 16.666667, 7, 7, 3, 'Offloaded', 8.166667],
-    ['EdgeServer', 8.50, 16.666667, 7, 7, 3, 'Cloud', 8.166667]
-]
+# Sample data for RL output
+data_rl = {
+    "Type": ["Local", "Local", "Local", "Local", "Local", "Offloaded", "Offloaded", "Cloud", "Cloud"],
+    "Priority": [1, 2, 2, 3, 1, 1, 2, 1, 2],
+    "Complexity": [3, 4, 4, 5, 6, 3, 5, 3, 5],
+    "Processing Time": [2.5, 4.444444, 5.555556, 9.722222, 10.0, 2.500973, 4.758116, 2.096151, 4.153293]
+}
 
-df = pd.DataFrame(data, columns=['Device', 'Start Time', 'End Time', 'Duration', 'Complexity', 'Priority', 'Type',
-                                 'Processing Time'])
+# Sample data for original output
+data_original = {
+    "Type": ["Local", "Local", "Local", "Local", "Local", "Offloaded", "Offloaded", "Cloud", "Cloud"],
+    "Priority": [1, 2, 2, 3, 1, 1, 2, 1, 2],
+    "Complexity": [3, 4, 4, 5, 6, 3, 5, 3, 5],
+    "Processing Time": [2.5, 4.444444, 5.555556, 9.722222, 10.0, 1.979999, 2.488570, 1.649035, 2.117606]
+}
 
-plt.figure(figsize=(12, 8))
+# Convert to DataFrames
+df_rl = pd.DataFrame(data_rl)
+df_original = pd.DataFrame(data_original)
 
-colors = {'Local': 'blue', 'Offloaded': 'red', 'Cloud': 'green'}
+# Filter out offloaded tasks
+df_rl_local = df_rl[df_rl["Type"] == "Local"]
+df_original_local = df_original[df_original["Type"] == "Local"]
 
-for task_type in df['Type'].unique():
-    data = df[df['Type'] == task_type]
-    plt.scatter(data['Complexity'], data['Processing Time'], label=task_type, color=colors[task_type], s=100)
+# Plotting
+plt.figure(figsize=(12, 6))
 
-    for i, row in data.iterrows():
-        plt.annotate(f"({row['Complexity']}, {row['Processing Time']:.2f})",
-                     (row['Complexity'], row['Processing Time']),
-                     xytext=(5, 5), textcoords='offset points')
+# Plot for RL output
+plt.subplot(1, 2, 1)
+sns.barplot(x='Priority', y='Processing Time', data=df_rl_local, hue='Complexity', palette='viridis')
+plt.title('RL Output - Local Tasks')
+plt.xlabel('Priority')
+plt.ylabel('Processing Time')
 
-# Add trend line for local processing
-local_data = df[df['Type'] == 'Local']
-z = np.polyfit(local_data['Complexity'], local_data['Processing Time'], 1)
-p = np.poly1d(z)
-plt.plot(local_data['Complexity'], p(local_data['Complexity']), "b--", label="Local trend")
-
-plt.xlabel('Task Complexity', fontsize=12)
-plt.ylabel('Processing Time', fontsize=12)
-plt.title('Processing Time vs Task Complexity', fontsize=14)
-plt.legend(fontsize=10)
-plt.grid(True)
-plt.ylim(bottom=0)  # Start y-axis from 0
+# Plot for Original output
+plt.subplot(1, 2, 2)
+sns.barplot(x='Priority', y='Processing Time', data=df_original_local, hue='Complexity', palette='viridis')
+plt.title('Original Output - Local Tasks')
+plt.xlabel('Priority')
+plt.ylabel('Processing Time')
 
 plt.tight_layout()
-plt.savefig('improved_processing_time_vs_complexity.png', dpi=300)
-plt.close()
-
-print("Improved plot has been saved as 'improved_processing_time_vs_complexity.png'")
+plt.show()
