@@ -130,7 +130,7 @@ class CloudEnvironment:
 env = simpy.Environment()
 
 # Create cloud environment with specified capabilities
-cloud_env = CloudEnvironment(env, num_servers=2, cpu_power=3.0, memory=16)
+cloud_env = CloudEnvironment(env, num_servers=2, cpu_power=32.0, memory=64)
 
 # Create edge server with specified capabilities and max concurrent tasks
 edge_server = EdgeServer(env, 'EdgeServer', cloud_env, cpu_power=2.0, memory=8, max_concurrent_tasks=5)
@@ -144,7 +144,6 @@ tasks = [
     Task(duration=6, complexity=6, priority=1, data_size=18),
     Task(duration=5, complexity=5, priority=2, data_size=14),
     Task(duration=4, complexity=3, priority=1, data_size=9)
-
 ]
 
 for task in tasks:
@@ -162,7 +161,7 @@ for task in edge_server.local_tasks:
 # Collect and process data
 all_data = (
         [(edge_server.name, *task) for task in edge_server.local_tasks] +
-        [(edge_server.name, *task) for task in edge_server.offloaded_tasks] +
+      #  [(edge_server.name, *task) for task in edge_server.offloaded_tasks] +
         [task for task in cloud_env.processed_tasks]
 )
 
@@ -181,5 +180,14 @@ print("\nComparison of processing times:")
 for _, row in df.iterrows():
     print(f"Type: {row['Type']}, Priority: {row['Priority']}, Complexity: {row['Complexity']}, Processing Time: {row['Processing Time']}")
 
+# Calculate and print average processing time for local tasks
+local_df = df[df['Type'] == 'Local']
+avg_local_processing_time = local_df['Processing Time'].mean()
+print(f"\nAverage processing time for local tasks: {avg_local_processing_time:.2f}")
+
+# Calculate and print average processing time for cloud tasks
+cloud_df = df[df['Type'] == 'Cloud']
+avg_cloud_processing_time = cloud_df['Processing Time'].mean()
+print(f"\nAverage processing time for cloud tasks: {avg_cloud_processing_time:.2f}")
 # Optionally, save to a CSV file
 df.to_csv('simulation_results.csv', index=False)

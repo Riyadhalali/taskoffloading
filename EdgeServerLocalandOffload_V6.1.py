@@ -1,15 +1,8 @@
 import simpy
 import pandas as pd
-import heapq
 import random
 import numpy as np
 
-# improvements:
-# printed the average processing time for local and cloud tasks
-# calculated the reward function for making sure that agent is learning well
-# implemented You might want to experiment with different reward functions.
-# Currently, the reward is the negative of processing time,
-# but you could consider factors like task priority or server load in the reward calculation
 class Network:
     def __init__(self, env):
         self.env = env
@@ -47,8 +40,7 @@ class RLAgent:
         self.exploration_rate = exploration_rate
         self.exploration_min = 0.01
         self.exploration_decay = exploration_decay
-        self.q_table = np.random.uniform(low=-1, high=1,
-                                         size=(state_size, action_size))  # Initialize with random values
+        self.q_table = np.random.uniform(low=-1, high=1, size=(state_size, action_size))
         self.total_reward = 0
 
     def get_action(self, state):
@@ -76,96 +68,28 @@ class EdgeServer:
         self.memory = memory
         self.task_queue = []
         self.local_tasks = []
-        self.offloaded_tasks = []
-        self.action = env.process(self.run())
         self.network = Network(env)
         self.current_load = 0
         self.max_load = cpu_power * 2
         self.max_concurrent_tasks = max_concurrent_tasks
         self.current_tasks = 0
-        self.rl_agent = RLAgent(state_size=10000, action_size=2)  # Reduced state size for simplicity
 
     def add_task(self, task):
-        if self.current_tasks < self.max_concurrent_tasks:
-            heapq.heappush(self.task_queue, task)
-            self.current_tasks += 1
-            print(f"{self.name} accepted task (priority {task.priority}, complexity {task.complexity})")
-        else:
-            print(
-                f"{self.name} offloading task (priority {task.priority}, complexity {task.complexity}) to cloud due to capacity")
-            self.env.process(self.offload_to_cloud(task))
+        # All tasks are now immediately sent to the cloud
+        self.env.process(self.send_to_cloud(task))
 
-    def run(self):
-        while True:
-            if self.task_queue:
-                task = heapq.heappop(self.task_queue)
-                self.current_tasks -= 1
-
-                if self.current_load >= self.max_load or self.should_offload(task):
-                    self.env.process(self.offload_to_cloud(task))
-                else:
-                    self.env.process(self.process_locally(task))
-            else:
-                yield self.env.timeout(1)
-
-    def get_state(self, task):
-        load_state = min(int(self.current_load / self.max_load * 10), 9)
-        network_state = min(int(self.network.latency / 5), 9)
-        complexity_state = min(task.complexity - 1, 9)  # Assuming complexity starts from 1
-        priority_state = min(task.priority - 1, 9)  # Assuming priority starts from 1
-        return load_state * 1000 + network_state * 100 + complexity_state * 10 + priority_state
-
-    def should_offload(self, task):
-        state = self.get_state(task)
-        action = self.rl_agent.get_action(state)
-        print(
-            f"Deciding for task (priority {task.priority}, complexity {task.complexity}): {'Offload' if action == 1 else 'Local'}")
-        return action == 1  # 1 for offload, 0 for local processing
-
-    def update_rl_agent(self, initial_state, action, reward, next_state):
-        self.rl_agent.update_q_table(initial_state, action, reward, next_state)
-        self.rl_agent.decay_exploration()
-
-    def offload_to_cloud(self, task):
-        initial_state = self.get_state(task)
-        start_time = self.env.now
-        print(f'{self.name} offloading task (priority {task.priority}, complexity {task.complexity}) at {self.env.now}')
+    def send_to_cloud(self, task):
         transfer_time = self.network.transfer_time(task.data_size)
         yield self.env.timeout(transfer_time)
-        yield self.env.process(self.cloud_env.process_task(task, self.name))
-        end_time = self.env.now
-        processing_time = end_time - start_time
-
-        # Calculate reward with additional factors
-        priority_bonus = task.priority  # Reward for higher priority tasks
-        load_penalty = 0  # No penalty for offloading, adjust if needed
-        reward = -processing_time + priority_bonus - load_penalty
-
-        self.rl_agent.total_reward += reward  # Update total reward
-        next_state = self.get_state(task)
-        self.update_rl_agent(initial_state, 1, reward, next_state)
-        self.offloaded_tasks.append(
-            (start_time, end_time, task.duration, task.complexity, task.priority, 'Offloaded'))
+        self.cloud_env.receive_task(task, self)
 
     def process_locally(self, task):
-        initial_state = self.get_state(task)
         start_time = self.env.now
-        print(
-            f'{self.name} processing task (priority {task.priority}, complexity {task.complexity}) locally at {self.env.now}')
         processing_time = self.calculate_local_processing_time(task)
         self.current_load += task.complexity
         yield self.env.timeout(processing_time)
         self.current_load -= task.complexity
         end_time = self.env.now
-
-        # Calculate reward with additional factors
-        priority_bonus = task.priority  # Reward for higher priority tasks
-        load_penalty = 0.1 * task.complexity  # Penalty for increasing server load, adjust factor as needed
-        reward = -processing_time + priority_bonus - load_penalty
-
-        self.rl_agent.total_reward += reward  # Update total reward
-        next_state = self.get_state(task)
-        self.update_rl_agent(initial_state, 0, reward, next_state)
         self.local_tasks.append((start_time, end_time, task.duration, task.complexity, task.priority, 'Local'))
         print(
             f'{self.name} completed local task (priority {task.priority}, complexity {task.complexity}) at {self.env.now}. Processing time: {end_time - start_time:.2f}')
@@ -175,27 +99,58 @@ class EdgeServer:
 
 
 class CloudEnvironment:
-    def __init__(self, env, num_servers, cpu_power, memory):
+    def __init__(self, env, num_servers, cpu_power, memory, num_edge_servers):
         self.env = env
         self.servers = simpy.Resource(env, num_servers)
         self.cpu_power = cpu_power
         self.memory = memory
         self.processed_tasks = []
         self.network = Network(env)
+        self.rl_agent = RLAgent(state_size=10000, action_size=num_edge_servers + 1)  # +1 for cloud processing
+        self.edge_servers = []
 
-    def process_task(self, task, device_name):
+    def add_edge_server(self, edge_server):
+        self.edge_servers.append(edge_server)
+
+    def receive_task(self, task, edge_server):
+        self.env.process(self.decide_and_process(task, edge_server))
+
+    def decide_and_process(self, task, edge_server):
+        state = self.get_state(task)
+        action = self.rl_agent.get_action(state)
+
+        if action == len(self.edge_servers):  # Last action corresponds to cloud processing
+            yield self.env.process(self.process_on_cloud(task, edge_server))
+        else:  # Process on one of the edge servers
+            yield self.env.process(self.send_to_edge(task, self.edge_servers[action]))
+
+    def get_state(self, task):
+        load_states = [min(int(server.current_load / server.max_load * 10), 9) for server in self.edge_servers]
+        network_state = min(int(self.network.latency / 5), 9)
+        complexity_state = min(task.complexity - 1, 9)
+        priority_state = min(task.priority - 1, 9)
+        state = 0
+        for i, load_state in enumerate(load_states):
+            state += load_state * (10 ** (4 + i))
+        state += network_state * 1000 + complexity_state * 10 + priority_state
+        return state
+
+    def send_to_edge(self, task, edge_server):
+        transfer_time = self.network.transfer_time(task.data_size)
+        yield self.env.timeout(transfer_time)
+        yield self.env.process(edge_server.process_locally(task))
+
+    def process_on_cloud(self, task, edge_server):
         with self.servers.request() as request:
             yield request
             start_time = self.env.now
             processing_time = self.calculate_cloud_processing_time(task)
             yield self.env.timeout(processing_time)
-            transfer_time = self.network.transfer_time(task.data_size)
-            yield self.env.timeout(transfer_time)
             end_time = self.env.now
             self.processed_tasks.append(
-                (device_name, start_time, end_time, task.duration, task.complexity, task.priority, 'Cloud'))
+                (edge_server.name, start_time, end_time, task.duration, task.complexity, task.priority, 'Cloud'))
             print(
-                f'Cloud processed task (priority {task.priority}, complexity {task.complexity}) from {device_name} at {self.env.now}')
+                f'Cloud processed task (priority {task.priority}, complexity {task.complexity}) from {edge_server.name} at {self.env.now}')
 
     def calculate_cloud_processing_time(self, task):
         return (task.duration * task.complexity) / (self.cpu_power * (1 + self.memory / 12))
@@ -205,10 +160,18 @@ class CloudEnvironment:
 env = simpy.Environment()
 
 # Create cloud environment with specified capabilities
-cloud_env = CloudEnvironment(env, num_servers=2, cpu_power=32.0, memory=64)
+cloud_env = CloudEnvironment(env, num_servers=2, cpu_power=32.0, memory=64, num_edge_servers=3)
 
-# Create edge server with specified capabilities and max concurrent tasks
-edge_server = EdgeServer(env, 'EdgeServer', cloud_env, cpu_power=2.0, memory=8, max_concurrent_tasks=5)
+# Create 3 edge servers with specified capabilities and max concurrent tasks
+edge_servers = [
+    EdgeServer(env, 'EdgeServer1', cloud_env, cpu_power=2.0, memory=8, max_concurrent_tasks=5),
+    EdgeServer(env, 'EdgeServer2', cloud_env, cpu_power=2.5, memory=10, max_concurrent_tasks=5),
+    EdgeServer(env, 'EdgeServer3', cloud_env, cpu_power=3.0, memory=12, max_concurrent_tasks=5),
+]
+
+# Register edge servers in the cloud environment
+for edge_server in edge_servers:
+    cloud_env.add_edge_server(edge_server)
 
 # Add tasks with different priorities, complexities, and data sizes
 tasks = [
@@ -221,16 +184,17 @@ tasks = [
 ]
 
 for task in tasks:
-    edge_server.add_task(task)
+    edge_servers[0].add_task(task)
 
 # Run the simulation
 env.run(until=20000)
 
-# Print summary of locally processed tasks
-print("\nSummary of locally processed tasks:")
-for task in edge_server.local_tasks:
-    start_time, end_time, duration, complexity, priority, _ = task
-    print(f"Priority: {priority}, Complexity: {complexity}, Processing Time: {end_time - start_time:.2f}")
+# Print summary of locally processed tasks for each edge server
+for edge_server in edge_servers:
+    print(f"\nSummary of locally processed tasks on {edge_server.name}:")
+    for task in edge_server.local_tasks:
+        start_time, end_time, duration, complexity, priority, _ = task
+        print(f"Priority: {priority}, Complexity: {complexity}, Processing Time: {end_time - start_time:.2f}")
 
 # Print summary of cloud processed tasks
 print("\nSummary of cloud processed tasks:")
@@ -241,7 +205,7 @@ for task in cloud_env.processed_tasks:
 
 # Collect and process data
 all_data = (
-        [(edge_server.name, *task) for task in edge_server.local_tasks] +
+        [(edge_server.name, *task) for edge_server in edge_servers for task in edge_server.local_tasks] +
         [task for task in cloud_env.processed_tasks]
 )
 
@@ -270,15 +234,16 @@ print(f"\nAverage processing time for local tasks: {avg_local_processing_time:.2
 cloud_df = df[df['Type'] == 'Cloud']
 avg_cloud_processing_time = cloud_df['Processing Time'].mean()
 print(f"\nAverage processing time for cloud tasks: {avg_cloud_processing_time:.2f}")
+
 # Optionally, save to a CSV file
 df.to_csv('simulation_results.csv', index=False)
 
 # Print the Q-table
 print("\nQ-table:")
-non_zero = np.count_nonzero(edge_server.rl_agent.q_table)
+non_zero = np.count_nonzero(cloud_env.rl_agent.q_table)
 print(f"Number of non-zero elements in Q-table: {non_zero}")
 print("Sample of Q-table (first 10 rows, all columns):")
-print(edge_server.rl_agent.q_table[:10])
+print(cloud_env.rl_agent.q_table[:10])
 
 # Print total reward for RL agent
-print(f"\nTotal reward for RL agent: {edge_server.rl_agent.total_reward}")
+print(f"\nTotal reward for RL agent: {cloud_env.rl_agent.total_reward}")

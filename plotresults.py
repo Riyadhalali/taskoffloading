@@ -1,48 +1,33 @@
-# Install necessary libraries
-import pandas as pd
-import seaborn as sns
 import matplotlib.pyplot as plt
+import numpy as np
 
-# Sample data for RL output
-data_rl = {
-    "Type": ["Local", "Local", "Local", "Local", "Local", "Offloaded", "Offloaded", "Cloud", "Cloud"],
-    "Priority": [1, 2, 2, 3, 1, 1, 2, 1, 2],
-    "Complexity": [3, 4, 4, 5, 6, 3, 5, 3, 5],
-    "Processing Time": [2.5, 4.444444, 5.555556, 9.722222, 10.0, 2.500973, 4.758116, 2.096151, 4.153293]
-}
+# Data
+servers = ['EdgeServer_0', 'EdgeServer_1', 'EdgeServer_2', 'Cloud']
+avg_times = [9.72, 5.65, 10.00, 0.40]
 
-# Sample data for original output
-data_original = {
-    "Type": ["Local", "Local", "Local", "Local", "Local", "Offloaded", "Offloaded", "Cloud", "Cloud"],
-    "Priority": [1, 2, 2, 3, 1, 1, 2, 1, 2],
-    "Complexity": [3, 4, 4, 5, 6, 3, 5, 3, 5],
-    "Processing Time": [2.5, 4.444444, 5.555556, 9.722222, 10.0, 1.979999, 2.488570, 1.649035, 2.117606]
-}
+# Create bar chart
+fig, ax = plt.subplots(figsize=(10, 6))
+bars = ax.bar(servers, avg_times, color=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728'])
 
-# Convert to DataFrames
-df_rl = pd.DataFrame(data_rl)
-df_original = pd.DataFrame(data_original)
+# Customize the chart
+ax.set_ylabel('Average Processing Time')
+ax.set_title('Comparison of Average Processing Times')
+ax.set_ylim(0, max(avg_times) * 1.1)  # Set y-axis limit with some headroom
 
-# Filter out offloaded tasks
-df_rl_local = df_rl[df_rl["Type"] == "Local"]
-df_original_local = df_original[df_original["Type"] == "Local"]
+# Add value labels on top of each bar
+for bar in bars:
+    height = bar.get_height()
+    ax.text(bar.get_x() + bar.get_width()/2., height,
+            f'{height:.2f}',
+            ha='center', va='bottom')
 
-# Plotting
-plt.figure(figsize=(12, 6))
+# Add a horizontal line for the overall average
+overall_avg = np.mean(avg_times)
+ax.axhline(y=overall_avg, color='r', linestyle='--', label=f'Overall Average: {overall_avg:.2f}')
 
-# Plot for RL output
-plt.subplot(1, 2, 1)
-sns.barplot(x='Priority', y='Processing Time', data=df_rl_local, hue='Complexity', palette='viridis')
-plt.title('RL Output - Local Tasks')
-plt.xlabel('Priority')
-plt.ylabel('Processing Time')
+# Add legend
+ax.legend()
 
-# Plot for Original output
-plt.subplot(1, 2, 2)
-sns.barplot(x='Priority', y='Processing Time', data=df_original_local, hue='Complexity', palette='viridis')
-plt.title('Original Output - Local Tasks')
-plt.xlabel('Priority')
-plt.ylabel('Processing Time')
-
+# Show the plot
 plt.tight_layout()
 plt.show()

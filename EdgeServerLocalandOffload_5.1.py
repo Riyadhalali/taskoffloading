@@ -176,7 +176,7 @@ class CloudEnvironment:
 env = simpy.Environment()
 
 # Create cloud environment with specified capabilities
-cloud_env = CloudEnvironment(env, num_servers=2, cpu_power=3.0, memory=16)
+cloud_env = CloudEnvironment(env, num_servers=2, cpu_power=32.0, memory=64)
 
 # Create edge server with specified capabilities and max concurrent tasks
 edge_server = EdgeServer(env, 'EdgeServer', cloud_env, cpu_power=2.0, memory=8, max_concurrent_tasks=5)

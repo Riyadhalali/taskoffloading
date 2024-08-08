@@ -80,7 +80,7 @@ class CloudEnvironment:
 env = simpy.Environment()
 
 # Create cloud environment with specified capabilities
-cloud_env = CloudEnvironment(env, num_servers=1, cpu_power=3.0, memory=16)
+cloud_env = CloudEnvironment(env, num_servers=1, cpu_power=16.0, memory=64)
 
 # Create edge server with specified capabilities
 edge_server = EdgeServer(env, 'EdgeServer', cloud_env, cpu_power=2.0, memory=8)
@@ -96,7 +96,7 @@ env.run(until=100)
 # Collect and process data
 all_data = (
         [(edge_server.name, *task) for task in edge_server.local_tasks] +
-        [(edge_server.name, *task) for task in edge_server.offloaded_tasks] +
+       # [(edge_server.name, *task) for task in edge_server.offloaded_tasks] +
         [task for task in cloud_env.processed_tasks]
 )
 

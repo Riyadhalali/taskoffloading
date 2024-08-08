@@ -95,7 +95,7 @@ env.run(until=100)
 # Collect and process data
 all_data = (
         [(edge_server.name, *task) for task in edge_server.local_tasks] +
-        [(edge_server.name, *task) for task in edge_server.offloaded_tasks] +
+       #[(edge_server.name, *task) for task in edge_server.offloaded_tasks] +
         [task for task in cloud_env.processed_tasks]
 )
 

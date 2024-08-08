@@ -4,12 +4,7 @@ import heapq
 import random
 import numpy as np
 
-# improvements:
-# printed the average processing time for local and cloud tasks
-# calculated the reward function for making sure that agent is learning well
-# implemented You might want to experiment with different reward functions.
-# Currently, the reward is the negative of processing time,
-# but you could consider factors like task priority or server load in the reward calculation
+# create multiple edge servers with robin
 class Network:
     def __init__(self, env):
         self.env = env
@@ -84,6 +79,7 @@ class EdgeServer:
         self.max_concurrent_tasks = max_concurrent_tasks
         self.current_tasks = 0
         self.rl_agent = RLAgent(state_size=10000, action_size=2)  # Reduced state size for simplicity
+
 
     def add_task(self, task):
         if self.current_tasks < self.max_concurrent_tasks:
@@ -207,8 +203,29 @@ env = simpy.Environment()
 # Create cloud environment with specified capabilities
 cloud_env = CloudEnvironment(env, num_servers=2, cpu_power=32.0, memory=64)
 
-# Create edge server with specified capabilities and max concurrent tasks
-edge_server = EdgeServer(env, 'EdgeServer', cloud_env, cpu_power=2.0, memory=8, max_concurrent_tasks=5)
+
+def assign_task_priority_based(task, edge_servers):
+    # Sort servers by current load (ascending)
+    sorted_servers = sorted(edge_servers, key=lambda server: server.current_load)
+
+    # Assign high priority tasks to less loaded servers
+    if task.priority == 3:  # Assuming 3 is the highest priority
+        sorted_servers[0].add_task(task)
+    elif task.priority == 2:
+        # Assign to the middle server in terms of load
+        sorted_servers[len(sorted_servers) // 2].add_task(task)
+    else:  # Low priority tasks
+        # Assign to the most loaded server
+        sorted_servers[-1].add_task(task)
+
+
+# Modify the task distribution part of the code:
+# Create multiple edge servers
+num_edge_servers = 3  # You can change this number as needed
+edge_servers = []
+for i in range(num_edge_servers):
+    edge_server = EdgeServer(env, f'EdgeServer_{i}', cloud_env, cpu_power=2.0, memory=8, max_concurrent_tasks=5)
+    edge_servers.append(edge_server)
 
 # Add tasks with different priorities, complexities, and data sizes
 tasks = [
@@ -220,30 +237,31 @@ tasks = [
     Task(duration=5, complexity=5, priority=2, data_size=14),
 ]
 
+# Distribute tasks among edge servers based on priority
 for task in tasks:
-    edge_server.add_task(task)
+    assign_task_priority_based(task, edge_servers)
 
 # Run the simulation
 env.run(until=20000)
 
-# Print summary of locally processed tasks
-print("\nSummary of locally processed tasks:")
-for task in edge_server.local_tasks:
-    start_time, end_time, duration, complexity, priority, _ = task
-    print(f"Priority: {priority}, Complexity: {complexity}, Processing Time: {end_time - start_time:.2f}")
+# Print summary of locally processed tasks for each edge server
+for edge_server in edge_servers:
+    print(f"\nSummary of locally processed tasks for {edge_server.name}:")
+    for task in edge_server.local_tasks:
+        start_time, end_time, duration, complexity, priority, _ = task
+        print(f"Priority: {priority}, Complexity: {complexity}, Processing Time: {end_time - start_time:.2f}")
 
 # Print summary of cloud processed tasks
 print("\nSummary of cloud processed tasks:")
 for task in cloud_env.processed_tasks:
     device_name, start_time, end_time, duration, complexity, priority, _ = task
-    print(
-        f"Device: {device_name}, Priority: {priority}, Complexity: {complexity}, Processing Time: {end_time - start_time:.2f}")
+    print(f"Device: {device_name}, Priority: {priority}, Complexity: {complexity}, Processing Time: {end_time - start_time:.2f}")
 
 # Collect and process data
-all_data = (
-        [(edge_server.name, *task) for task in edge_server.local_tasks] +
-        [task for task in cloud_env.processed_tasks]
-)
+all_data = []
+for edge_server in edge_servers:
+    all_data.extend([(edge_server.name, *task) for task in edge_server.local_tasks])
+all_data.extend([task for task in cloud_env.processed_tasks])
 
 # Create a DataFrame
 df = pd.DataFrame(all_data, columns=['Device', 'Start Time', 'End Time', 'Duration', 'Complexity', 'Priority', 'Type'])
@@ -258,27 +276,30 @@ print(df)
 # Print comparison
 print("\nComparison of processing times:")
 for _, row in df.iterrows():
-    print(
-        f"Type: {row['Type']}, Priority: {row['Priority']}, Complexity: {row['Complexity']}, Processing Time: {row['Processing Time']}")
+    print(f"Device: {row['Device']}, Type: {row['Type']}, Priority: {row['Priority']}, Complexity: {row['Complexity']}, Processing Time: {row['Processing Time']}")
 
-# Calculate and print average processing time for local tasks
-local_df = df[df['Type'] == 'Local']
-avg_local_processing_time = local_df['Processing Time'].mean()
-print(f"\nAverage processing time for local tasks: {avg_local_processing_time:.2f}")
+# Calculate and print average processing time for local tasks per edge server
+for edge_server in edge_servers:
+    local_df = df[(df['Type'] == 'Local') & (df['Device'] == edge_server.name)]
+    avg_local_processing_time = local_df['Processing Time'].mean()
+    print(f"\nAverage processing time for local tasks on {edge_server.name}: {avg_local_processing_time:.2f}")
 
 # Calculate and print average processing time for cloud tasks
 cloud_df = df[df['Type'] == 'Cloud']
 avg_cloud_processing_time = cloud_df['Processing Time'].mean()
 print(f"\nAverage processing time for cloud tasks: {avg_cloud_processing_time:.2f}")
+
 # Optionally, save to a CSV file
 df.to_csv('simulation_results.csv', index=False)
 
-# Print the Q-table
-print("\nQ-table:")
-non_zero = np.count_nonzero(edge_server.rl_agent.q_table)
-print(f"Number of non-zero elements in Q-table: {non_zero}")
-print("Sample of Q-table (first 10 rows, all columns):")
-print(edge_server.rl_agent.q_table[:10])
+# Print the Q-table for each edge server
+for edge_server in edge_servers:
+    print(f"\nQ-table for {edge_server.name}:")
+    non_zero = np.count_nonzero(edge_server.rl_agent.q_table)
+    print(f"Number of non-zero elements in Q-table: {non_zero}")
+    print("Sample of Q-table (first 10 rows, all columns):")
+    print(edge_server.rl_agent.q_table[:10])
 
-# Print total reward for RL agent
-print(f"\nTotal reward for RL agent: {edge_server.rl_agent.total_reward}")
+    # Print total reward for RL agent
+    print(f"\nTotal reward for RL agent on {edge_server.name}: {edge_server.rl_agent.total_reward}")
+
