@@ -2,6 +2,8 @@ import simpy
 import pandas as pd
 import random
 import numpy as np
+from tabulate import tabulate
+
 
 class Network:
     def __init__(self, env):
@@ -75,7 +77,6 @@ class EdgeServer:
         self.current_tasks = 0
 
     def add_task(self, task):
-        # All tasks are now immediately sent to the cloud
         self.env.process(self.send_to_cloud(task))
 
     def send_to_cloud(self, task):
@@ -108,11 +109,32 @@ class CloudEnvironment:
         self.network = Network(env)
         self.rl_agent = RLAgent(state_size=10000, action_size=num_edge_servers + 1)  # +1 for cloud processing
         self.edge_servers = []
+        self.task_data = []  # New attribute to store task data
 
     def add_edge_server(self, edge_server):
         self.edge_servers.append(edge_server)
 
     def receive_task(self, task, edge_server):
+        state = self.get_state(task)
+        load_states = [min(int(server.current_load / server.max_load * 10), 9) for server in self.edge_servers]
+        network_state = min(int(self.network.latency / 5), 9)
+        complexity_state = min(task.complexity - 1, 9)
+        priority_state = min(task.priority - 1, 9)
+
+        task_info = {
+            "Time": self.env.now,
+            "Edge Server": edge_server.name,
+            "Task Duration": task.duration,
+           # "Task Complexity": task.complexity,
+            "Task Priority": task.priority,
+        #    "Task Data Size": task.data_size,
+            "Edge Server Loads": ','.join(map(str, load_states)),
+        #    "Network State": network_state,
+         #   "Task Complexity State": complexity_state,
+            "Task Priority State": priority_state,
+            "Computed State Value": state
+        }
+        self.task_data.append(task_info)
         self.env.process(self.decide_and_process(task, edge_server))
 
     def decide_and_process(self, task, edge_server):
@@ -120,8 +142,15 @@ class CloudEnvironment:
         action = self.rl_agent.get_action(state)
 
         if action == len(self.edge_servers):  # Last action corresponds to cloud processing
-            yield self.env.process(self.process_on_cloud(task, edge_server))
+            action_str = "Process on cloud"
         else:  # Process on one of the edge servers
+            action_str = f"Send to {self.edge_servers[action].name}"
+
+        self.task_data[-1]["Action"] = action_str
+
+        if action == len(self.edge_servers):
+            yield self.env.process(self.process_on_cloud(task, edge_server))
+        else:
             yield self.env.process(self.send_to_edge(task, self.edge_servers[action]))
 
     def get_state(self, task):
@@ -183,18 +212,39 @@ tasks = [
     Task(duration=5, complexity=5, priority=2, data_size=14),
 ]
 
-for task in tasks:
-    edge_servers[0].add_task(task)
+# Distribute tasks among all edge servers
+for i, task in enumerate(tasks):
+    edge_servers[i % len(edge_servers)].add_task(task)
+
 
 # Run the simulation
 env.run(until=20000)
 
-# Print summary of locally processed tasks for each edge server
+# Print task data as a table
+print("\nTask Data:")
+headers = ["Time", "Edge Server", "Task Duration", "Task Priority",
+          "Task Priority State", "Computed State Value",
+           "Action"]
+task_table = [[task.get(key, "N/A") for key in headers] for task in cloud_env.task_data]
+print(tabulate(task_table, headers=headers, tablefmt="grid"))
+
+# Print summary of locally processed tasks for each edge server and calculate average processing time
 for edge_server in edge_servers:
     print(f"\nSummary of locally processed tasks on {edge_server.name}:")
+    total_processing_time = 0
+    task_count = len(edge_server.local_tasks)
+
     for task in edge_server.local_tasks:
         start_time, end_time, duration, complexity, priority, _ = task
-        print(f"Priority: {priority}, Complexity: {complexity}, Processing Time: {end_time - start_time:.2f}")
+        processing_time = end_time - start_time
+        total_processing_time += processing_time
+        print(f"Priority: {priority}, Complexity: {complexity}, Processing Time: {processing_time:.2f}")
+
+    if task_count > 0:
+        avg_processing_time = total_processing_time / task_count
+        print(f"Average processing time on {edge_server.name}: {avg_processing_time:.2f}")
+    else:
+        print(f"No tasks processed on {edge_server.name}.")
 
 # Print summary of cloud processed tasks
 print("\nSummary of cloud processed tasks:")
