@@ -28,6 +28,8 @@ class Task:
         self.priority = priority
         self.data_size = data_size
 
+
+# sorting task using its prority
     def __lt__(self, other):
         return self.priority < other.priority
 
