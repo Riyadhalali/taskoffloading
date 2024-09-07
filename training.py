@@ -64,7 +64,31 @@ class RLAgent:
 
 
 class EdgeServer:
-    def __int__(self,env,name,cloud_env,cpu_power,mmemory,max_concurrent_tasks):
+    def __int__(self,env,name,cloud_env,cpu_power,memory,max_concurrent_tasks):
         self.env = env
         self.name = name
         self.cloud_env = cloud_env
+        self.memory = memory
+        self.task_queue = []
+        self.local_tasks = []
+        self.network = Network(env)
+        self.current_load = cpu_power * 2
+        self.max_concurrent_tasks = max_concurrent_tasks
+        self.current_task = 0
+
+
+    def add_task(self,task):
+        self.env.process(self.send_to_cloud(task))
+
+    def send_to_cloud(self,task):
+        transfer_time = self.network.transfer_time(task.data_size)
+        yield self.env.timeout(transfer_time)
+        self.cloud_env.receive_tasll(task, self)
+
+
+    def process_locally
+
+
+
+
+

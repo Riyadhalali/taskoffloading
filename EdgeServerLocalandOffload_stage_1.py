@@ -3,6 +3,7 @@ import pandas as pd
 import heapq
 
 # compare between task execution on cloud and local with task priority
+# stage 1
 class Task:
     def __init__(self, duration, complexity, priority):
         self.duration = duration
