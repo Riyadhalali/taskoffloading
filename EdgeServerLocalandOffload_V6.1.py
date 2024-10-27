@@ -12,11 +12,12 @@ class Network:
         self.bandwidth = 200
         self.env.process(self.fluctuate_latency())
 
+    # change every 60 time unit to simulate network fluctuate
     def fluctuate_latency(self):
         while True:
             self.latency = random.uniform(5, 50)
             yield self.env.timeout(60)
-
+# transfer time = transmission time + latency
     def transfer_time(self, data_size):
         return (data_size * 8 / self.bandwidth) + (self.latency / 1000)
 
