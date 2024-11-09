@@ -83,7 +83,7 @@ class EdgeServer:
 
     def add_task(self, task):
         if self.current_tasks < self.max_concurrent_tasks:
-            heapq.heappush(self.task_queue, task)
+            heapq.heappush(self.task_queue, task)  # for getting the smallest task priority
             self.current_tasks += 1
             print(f"{self.name} accepted task (priority {task.priority}, complexity {task.complexity})")
         else:

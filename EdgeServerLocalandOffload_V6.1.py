@@ -1,7 +1,7 @@
 import simpy
-import pandas as pd
+import pandas as pd    # for dataframes
 import random
-import numpy as np
+import numpy as np     # numeric library in  python
 from tabulate import tabulate
 
 
@@ -48,10 +48,12 @@ class RLAgent:
         self.q_table = np.random.uniform(low=-1, high=1, size=(state_size, action_size))
         self.total_reward = 0
 
+
+# if the action is lower the exploration rate so explor and return the action or pick the best value for the know state
     def get_action(self, state):
         if np.random.rand() < self.exploration_rate:
-            return np.random.randint(self.action_size)
-        return np.argmax(self.q_table[state])
+            return np.random.randint(self.action_size)  # return exploration
+        return np.argmax(self.q_table[state])  # return best state known for action
 
     def update_q_table(self, state, action, reward, next_state):
         current_q = self.q_table[state, action]
@@ -60,6 +62,7 @@ class RLAgent:
         self.q_table[state, action] = new_q
         print(f"Updated Q-value for state {state}, action {action}: {new_q:.2f}")
 
+# Reduce the exploration among time
     def decay_exploration(self):
         self.exploration_rate = max(self.exploration_min, self.exploration_rate * self.exploration_decay)
 
@@ -143,7 +146,7 @@ class CloudEnvironment:
     def decide_and_process(self, task, edge_server):
         state = self.get_state(task)
         action = self.rl_agent.get_action(state)
-
+        # if return 3 so process on cloud else if returns number of servers 0,1,2 it will not process on cloud it is a way to check for process on cloud
         if action == len(self.edge_servers):  # Last action corresponds to cloud processing
             action_str = "Process on cloud"
         else:  # Process on one of the edge servers
@@ -173,6 +176,7 @@ class CloudEnvironment:
         yield self.env.process(edge_server.process_locally(task))
 
     def process_on_cloud(self, task, edge_server):
+        # wait until resource on cloud as available to be handled
         with self.servers.request() as request:
             yield request
             start_time = self.env.now
@@ -184,6 +188,10 @@ class CloudEnvironment:
             print(
                 f'Cloud processed task (priority {task.priority}, complexity {task.complexity}) from {edge_server.name} at {self.env.now}')
 
+
+# processing_time= (task duration *  task complexity) / (cpu power * (1 + (memory / 12))
+# Dividing by 12 makes the memory impact more gradual. For instance, if self.memory is 12 GB,
+    # then (1 + self.memory / 12) becomes 2, doubling the effect of self.cpu_power.
     def calculate_cloud_processing_time(self, task):
         return (task.duration * task.complexity) / (self.cpu_power * (1 + self.memory / 12))
 
@@ -258,7 +266,7 @@ for task in cloud_env.processed_tasks:
 
 # Collect and process data
 all_data = (
-        [(edge_server.name, *task) for edge_server in edge_servers for task in edge_server.local_tasks] +
+        [(edge_server.name, *task) for edge_server in edge_servers for task in edge_server.local_tasks] +   # for extracting all tasks processed in edge servers
         [task for task in cloud_env.processed_tasks]
 )
 
@@ -274,18 +282,18 @@ print(df)
 
 # Print comparison
 print("\nComparison of processing times:")
-for _, row in df.iterrows():
+for _, row in df.iterrows():   # for looping in rows (_)
     print(
         f"Type: {row['Type']}, Priority: {row['Priority']}, Complexity: {row['Complexity']}, Processing Time: {row['Processing Time']}")
 
 # Calculate and print average processing time for local tasks
 local_df = df[df['Type'] == 'Local']
-avg_local_processing_time = local_df['Processing Time'].mean()
+avg_local_processing_time = local_df['Processing Time'].mean()   # mean used for average in row calculate in panadas
 print(f"\nAverage processing time for local tasks: {avg_local_processing_time:.2f}")
 
 # Calculate and print average processing time for cloud tasks
 cloud_df = df[df['Type'] == 'Cloud']
-avg_cloud_processing_time = cloud_df['Processing Time'].mean()
+avg_cloud_processing_time = cloud_df['Processing Time'].mean()   # mean used for average in row calculate in pandas
 print(f"\nAverage processing time for cloud tasks: {avg_cloud_processing_time:.2f}")
 
 # Optionally, save to a CSV file
