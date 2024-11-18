@@ -285,9 +285,15 @@ for edge_server in edge_servers:
     print(f"\nAverage processing time for local tasks on {edge_server.name}: {avg_local_processing_time:.2f}")
 
 # Calculate and print average processing time for cloud tasks
+# Calculate and print average processing time for local tasks
+
+# Calculate and print average processing time for cloud tasks
 cloud_df = df[df['Type'] == 'Cloud']
-avg_cloud_processing_time = cloud_df['Processing Time'].mean()
+avg_cloud_processing_time = cloud_df['Processing Time'].mean()   # mean used for average in row calculate in pandas
 print(f"\nAverage processing time for cloud tasks: {avg_cloud_processing_time:.2f}")
+local_df = df[df['Type'] == 'Local']
+avg_local_processing_time = local_df['Processing Time'].mean()   # mean used for average in row calculate in panadas
+print(f"\nAverage processing time for local tasks: {avg_local_processing_time:.2f}")
 
 # Optionally, save to a CSV file
 df.to_csv('simulation_results.csv', index=False)
@@ -297,9 +303,9 @@ for edge_server in edge_servers:
     print(f"\nQ-table for {edge_server.name}:")
     non_zero = np.count_nonzero(edge_server.rl_agent.q_table)
     print(f"Number of non-zero elements in Q-table: {non_zero}")
-    print("Sample of Q-table (first 10 rows, all columns):")
+   # print("Sample of Q-table (first 10 rows, all columns):")
     print(edge_server.rl_agent.q_table[:10])
 
     # Print total reward for RL agent
-    print(f"\nTotal reward for RL agent on {edge_server.name}: {edge_server.rl_agent.total_reward}")
+  #  print(f"\nTotal reward for RL agent on {edge_server.name}: {edge_server.rl_agent.total_reward}")
 

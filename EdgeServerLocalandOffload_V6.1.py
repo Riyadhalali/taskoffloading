@@ -15,7 +15,7 @@ class Network:
     # change every 60 time unit to simulate network fluctuate
     def fluctuate_latency(self):
         while True:
-            self.latency = random.uniform(5, 50)
+            self.latency = random.uniform(5, 50)  # uniform generate random floating number
             yield self.env.timeout(60)
 # transfer time = transmission time + latency
     def transfer_time(self, data_size):
@@ -55,14 +55,32 @@ class RLAgent:
             return np.random.randint(self.action_size)  # return exploration
         return np.argmax(self.q_table[state])  # return best state known for action
 
+    # def update_q_table(self, state, action, reward, next_state):
+    #     current_q = self.q_table[state, action]
+    #     max_next_q = np.max(self.q_table[next_state])
+    #     new_q = current_q + self.learning_rate * (reward + self.discount_factor * max_next_q - current_q)
+    #     self.q_table[state, action] = new_q
+    #     print(f"Updated Q-value for state {state}, action {action}: {new_q:.2f}")
     def update_q_table(self, state, action, reward, next_state):
-        current_q = self.q_table[state, action]
-        max_next_q = np.max(self.q_table[next_state])
-        new_q = current_q + self.learning_rate * (reward + self.discount_factor * max_next_q - current_q)
-        self.q_table[state, action] = new_q
-        print(f"Updated Q-value for state {state}, action {action}: {new_q:.2f}")
+        # Clamp state and next_state to the bounds of the Q-table
+        state = min(state, self.q_table.shape[0] - 1)
+        next_state = min(next_state, self.q_table.shape[0] - 1)
 
-# Reduce the exploration among time
+        # Debugging: Log the state and next_state values
+        if state >= self.q_table.shape[0] or next_state >= self.q_table.shape[0]:
+            print(f"Out of bounds detected! state: {state}, next_state: {next_state}")
+
+        # Retrieve maximum Q-value for next state
+        max_next_q = np.max(self.q_table[next_state])
+
+        # Update Q-value
+        old_value = self.q_table[state, action]
+        self.q_table[state, action] += self.learning_rate * (reward + self.discount_factor * max_next_q - old_value)
+
+        # Debugging: Log the updated Q-value
+        print(f"Updated Q-value for state {state}, action {action}: {self.q_table[state, action]:.2f}")
+
+    # Reduce the exploration among time
     def decay_exploration(self):
         self.exploration_rate = max(self.exploration_min, self.exploration_rate * self.exploration_decay)
 
@@ -88,7 +106,7 @@ class EdgeServer:
     def send_to_cloud(self, task):
         transfer_time = self.network.transfer_time(task.data_size)
         yield self.env.timeout(transfer_time)
-        self.cloud_env.receive_task(task, self)
+        self.cloud_env.receive_task(task, self)  # send to cloud
 
     def process_locally(self, task):
         start_time = self.env.now
@@ -143,21 +161,45 @@ class CloudEnvironment:
         self.task_data.append(task_info)
         self.env.process(self.decide_and_process(task, edge_server))
 
+    # def decide_and_process(self, task, edge_server):
+    #     state = self.get_state(task)
+    #     action = self.rl_agent.get_action(state)
+    #     # if return 3 so process on cloud else if returns number of servers 0,1,2 it will not process on cloud it is a way to check for process on cloud
+    #     if action == len(self.edge_servers):  # Last action corresponds to cloud processing
+    #         action_str = "Process on cloud"
+    #     else:  # Process on one of the edge servers
+    #         action_str = f"Send to {self.edge_servers[action].name}"
+    #
+    #     self.task_data[-1]["Action"] = action_str   # getting the last added element
+    #
+    #     if action == len(self.edge_servers):
+    #         yield self.env.process(self.process_on_cloud(task, edge_server))
+    #     else:
+    #         yield self.env.process(self.send_to_edge(task, self.edge_servers[action]))
+
     def decide_and_process(self, task, edge_server):
         state = self.get_state(task)
         action = self.rl_agent.get_action(state)
-        # if return 3 so process on cloud else if returns number of servers 0,1,2 it will not process on cloud it is a way to check for process on cloud
-        if action == len(self.edge_servers):  # Last action corresponds to cloud processing
+        # إذا كانت العملية على السحابة
+        if action == len(self.edge_servers):
             action_str = "Process on cloud"
-        else:  # Process on one of the edge servers
+            reward = -1  # مثلاً، مكافأة سلبية لتكلفة إضافية
+        else:
             action_str = f"Send to {self.edge_servers[action].name}"
+            reward = 1  # مثلاً، مكافأة إيجابية إذا تمت المعالجة محلياً
 
         self.task_data[-1]["Action"] = action_str
 
+        # تنفيذ الإجراء
         if action == len(self.edge_servers):
             yield self.env.process(self.process_on_cloud(task, edge_server))
         else:
             yield self.env.process(self.send_to_edge(task, self.edge_servers[action]))
+
+        # تحديث الـ Q-table
+        next_state = self.get_state(task)  # احصل على الحالة التالية
+        self.rl_agent.update_q_table(state, action, reward, next_state)
+        self.rl_agent.decay_exploration()  # تقليل الاستكشاف تدريجياً
 
     def get_state(self, task):
         load_states = [min(int(server.current_load / server.max_load * 10), 9) for server in self.edge_servers]
@@ -166,7 +208,7 @@ class CloudEnvironment:
         priority_state = min(task.priority - 1, 9)
         state = 0
         for i, load_state in enumerate(load_states):
-            state += load_state * (10 ** (4 + i))
+            state += load_state * (10 ** (4 + i))  # multiple by thousands for each server so we can add another variable state like network state
         state += network_state * 1000 + complexity_state * 10 + priority_state
         return state
 
@@ -212,7 +254,6 @@ edge_servers = [
 # Register edge servers in the cloud environment
 for edge_server in edge_servers:
     cloud_env.add_edge_server(edge_server)
-
 # Add tasks with different priorities, complexities, and data sizes
 tasks = [
     Task(duration=5, complexity=4, priority=2, data_size=10),
@@ -222,8 +263,8 @@ tasks = [
     Task(duration=6, complexity=6, priority=1, data_size=18),
     Task(duration=5, complexity=5, priority=2, data_size=14),
 ]
-
-# Distribute tasks among all edge servers
+# Distribute tasks among all edge servers using
+# enumerate generate index i and value task for each element
 for i, task in enumerate(tasks):
     edge_servers[i % len(edge_servers)].add_task(task)
 
@@ -234,7 +275,7 @@ env.run(until=20000)
 # Print task data as a table
 print("\nTask Data:")
 headers = ["Time", "Edge Server", "Task Duration", "Task Priority",
-          "Task Priority State", "Computed State Value",
+          "Computed State Value",
            "Action"]
 task_table = [[task.get(key, "N/A") for key in headers] for task in cloud_env.task_data]
 print(tabulate(task_table, headers=headers, tablefmt="grid"))
@@ -251,7 +292,7 @@ for edge_server in edge_servers:
         total_processing_time += processing_time
         print(f"Priority: {priority}, Complexity: {complexity}, Processing Time: {processing_time:.2f}")
 
-    if task_count > 0:
+    if task_count > 0:   # if there is tasks
         avg_processing_time = total_processing_time / task_count
         print(f"Average processing time on {edge_server.name}: {avg_processing_time:.2f}")
     else:
@@ -307,4 +348,4 @@ print("Sample of Q-table (first 10 rows, all columns):")
 print(cloud_env.rl_agent.q_table[:10])
 
 # Print total reward for RL agent
-print(f"\nTotal reward for RL agent: {cloud_env.rl_agent.total_reward}")
+ # print(f"\nTotal reward for RL agent: {cloud_env.rl_agent.total_reward}")
