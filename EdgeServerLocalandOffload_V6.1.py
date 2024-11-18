@@ -63,7 +63,7 @@ class RLAgent:
     #     print(f"Updated Q-value for state {state}, action {action}: {new_q:.2f}")
     def update_q_table(self, state, action, reward, next_state):
        # print(f"Reward for state {state}, action {action}: {reward}")
-        # Clamp state and next_state to the bounds of the Q-table
+        # Clamp state and next_state to the bounds of the Q-table because it was making error out of bound
         state = min(state, self.q_table.shape[0] - 1)
         next_state = min(next_state, self.q_table.shape[0] - 1)
         max_next_q = np.max(self.q_table[next_state])
@@ -92,7 +92,7 @@ class EdgeServer:
         self.current_tasks = 0
 
     def add_task(self, task):
-        self.env.process(self.send_to_cloud(task))
+        self.env.process(self.send_to_cloud(task))  # processing in env simulation for Simpy library
 
     def send_to_cloud(self, task):
         transfer_time = self.network.transfer_time(task.data_size)
@@ -122,7 +122,7 @@ class CloudEnvironment:
         self.memory = memory
         self.processed_tasks = []
         self.network = Network(env)
-        self.rl_agent = RLAgent(state_size=10000, action_size=num_edge_servers + 1)  # +1 for cloud processing
+        self.rl_agent = RLAgent(state_size=2, action_size=num_edge_servers + 1)  # +1 for cloud processing
         self.edge_servers = []
         self.task_data = []  # New attribute to store task data
 
@@ -131,6 +131,7 @@ class CloudEnvironment:
 
     def receive_task(self, task, edge_server):
         state = self.get_state(task)
+        # take snapshot for getting the loads on servers when tasks is received and also converted to string and added to task_info using join map
         load_states = [min(int(server.current_load / server.max_load * 10), 9) for server in self.edge_servers]
         network_state = min(int(self.network.latency / 5), 9)
         complexity_state = min(task.complexity - 1, 9)
@@ -193,6 +194,7 @@ class CloudEnvironment:
         self.rl_agent.decay_exploration()  # تقليل الاستكشاف تدريجياً
 
     def get_state(self, task):
+        # this part is the computed part where it effects the offloading the task
         load_states = [min(int(server.current_load / server.max_load * 10), 9) for server in self.edge_servers]
         network_state = min(int(self.network.latency / 5), 9)
         complexity_state = min(task.complexity - 1, 9)
@@ -257,10 +259,16 @@ tasks = [
 ]
 # Distribute tasks among all edge servers using
 # enumerate generate index i and value task for each element
+# example :
+# i=0 , 3 % 0 = 0 => so on EdgeServer_1
+# i=1 , 3 % 1 = 1 => on EdgeServer_2
+# i=2 , 3 % 2 = 2 => on EdgeServer_3
+# the loop while starts again
+# i=3 , 3 % 3 = 0 => on EdgeServer_1
+# i=4 , 3% 4 = 1 => on EdgeServer_2
+
 for i, task in enumerate(tasks):
     edge_servers[i % len(edge_servers)].add_task(task)
-
-
 # Run the simulation
 env.run(until=20000)
 
