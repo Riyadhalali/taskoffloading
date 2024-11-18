@@ -62,23 +62,14 @@ class RLAgent:
     #     self.q_table[state, action] = new_q
     #     print(f"Updated Q-value for state {state}, action {action}: {new_q:.2f}")
     def update_q_table(self, state, action, reward, next_state):
+       # print(f"Reward for state {state}, action {action}: {reward}")
         # Clamp state and next_state to the bounds of the Q-table
         state = min(state, self.q_table.shape[0] - 1)
         next_state = min(next_state, self.q_table.shape[0] - 1)
-
-        # Debugging: Log the state and next_state values
-        if state >= self.q_table.shape[0] or next_state >= self.q_table.shape[0]:
-            print(f"Out of bounds detected! state: {state}, next_state: {next_state}")
-
-        # Retrieve maximum Q-value for next state
         max_next_q = np.max(self.q_table[next_state])
-
         # Update Q-value
-        old_value = self.q_table[state, action]
-        self.q_table[state, action] += self.learning_rate * (reward + self.discount_factor * max_next_q - old_value)
-
-        # Debugging: Log the updated Q-value
-        print(f"Updated Q-value for state {state}, action {action}: {self.q_table[state, action]:.2f}")
+        current_q = self.q_table[state, action]
+        self.q_table[state, action] += self.learning_rate * (reward + self.discount_factor * max_next_q - current_q)
 
     # Reduce the exploration among time
     def decay_exploration(self):
@@ -149,12 +140,12 @@ class CloudEnvironment:
             "Time": self.env.now,
             "Edge Server": edge_server.name,
             "Task Duration": task.duration,
-           # "Task Complexity": task.complexity,
+            "Task Complexity": task.complexity,
             "Task Priority": task.priority,
-        #    "Task Data Size": task.data_size,
+            "Task Data Size": task.data_size,
             "Edge Server Loads": ','.join(map(str, load_states)),
-        #    "Network State": network_state,
-         #   "Task Complexity State": complexity_state,
+            "Network State": network_state,
+            "Task Complexity State": complexity_state,
             "Task Priority State": priority_state,
             "Computed State Value": state
         }
@@ -180,23 +171,23 @@ class CloudEnvironment:
     def decide_and_process(self, task, edge_server):
         state = self.get_state(task)
         action = self.rl_agent.get_action(state)
-        # إذا كانت العملية على السحابة
+        # if task on cloud
         if action == len(self.edge_servers):
             action_str = "Process on cloud"
-            reward = -1  # مثلاً، مكافأة سلبية لتكلفة إضافية
+            reward = -1  # negative reward for processing on cloud
         else:
             action_str = f"Send to {self.edge_servers[action].name}"
-            reward = 1  # مثلاً، مكافأة إيجابية إذا تمت المعالجة محلياً
+            reward = 1  #
 
         self.task_data[-1]["Action"] = action_str
 
-        # تنفيذ الإجراء
+        # execute the action
         if action == len(self.edge_servers):
             yield self.env.process(self.process_on_cloud(task, edge_server))
         else:
             yield self.env.process(self.send_to_edge(task, self.edge_servers[action]))
 
-        # تحديث الـ Q-table
+        # update_q_table
         next_state = self.get_state(task)  # احصل على الحالة التالية
         self.rl_agent.update_q_table(state, action, reward, next_state)
         self.rl_agent.decay_exploration()  # تقليل الاستكشاف تدريجياً
@@ -262,6 +253,7 @@ tasks = [
     Task(duration=4, complexity=4, priority=2, data_size=12),
     Task(duration=6, complexity=6, priority=1, data_size=18),
     Task(duration=5, complexity=5, priority=2, data_size=14),
+
 ]
 # Distribute tasks among all edge servers using
 # enumerate generate index i and value task for each element
@@ -348,4 +340,4 @@ print("Sample of Q-table (first 10 rows, all columns):")
 print(cloud_env.rl_agent.q_table[:10])
 
 # Print total reward for RL agent
- # print(f"\nTotal reward for RL agent: {cloud_env.rl_agent.total_reward}")
+#print(f"\nTotal reward for RL agent: {cloud_env.rl_agent.total_reward}")
