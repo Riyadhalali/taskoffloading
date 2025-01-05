@@ -55,16 +55,11 @@ class RLAgent:
             return np.random.randint(self.action_size)  # return exploration
         return np.argmax(self.q_table[state])  # return best state known for action
 
-    # def update_q_table(self, state, action, reward, next_state):
-    #     current_q = self.q_table[state, action]
-    #     max_next_q = np.max(self.q_table[next_state])
-    #     new_q = current_q + self.learning_rate * (reward + self.discount_factor * max_next_q - current_q)
-    #     self.q_table[state, action] = new_q
-    #     print(f"Updated Q-value for state {state}, action {action}: {new_q:.2f}")
+
     def update_q_table(self, state, action, reward, next_state):
        # print(f"Reward for state {state}, action {action}: {reward}")
         # Clamp state and next_state to the bounds of the Q-table because it was making error out of bound
-        state = min(state, self.q_table.shape[0] - 1)
+        state = min(state, self.q_table.shape[0] - 1)  # shape [0] for rows counts in the q-table and shape[1] for columns count
         next_state = min(next_state, self.q_table.shape[0] - 1)
         max_next_q = np.max(self.q_table[next_state])
         # Update Q-value
@@ -122,7 +117,7 @@ class CloudEnvironment:
         self.memory = memory
         self.processed_tasks = []
         self.network = Network(env)
-        self.rl_agent = RLAgent(state_size=2, action_size=num_edge_servers + 1)  # +1 for cloud processing
+        self.rl_agent = RLAgent(state_size=10, action_size=num_edge_servers + 1)  # +1 for cloud processing
         self.edge_servers = []
         self.task_data = []  # New attribute to store task data
 
@@ -153,21 +148,6 @@ class CloudEnvironment:
         self.task_data.append(task_info)
         self.env.process(self.decide_and_process(task, edge_server))
 
-    # def decide_and_process(self, task, edge_server):
-    #     state = self.get_state(task)
-    #     action = self.rl_agent.get_action(state)
-    #     # if return 3 so process on cloud else if returns number of servers 0,1,2 it will not process on cloud it is a way to check for process on cloud
-    #     if action == len(self.edge_servers):  # Last action corresponds to cloud processing
-    #         action_str = "Process on cloud"
-    #     else:  # Process on one of the edge servers
-    #         action_str = f"Send to {self.edge_servers[action].name}"
-    #
-    #     self.task_data[-1]["Action"] = action_str   # getting the last added element
-    #
-    #     if action == len(self.edge_servers):
-    #         yield self.env.process(self.process_on_cloud(task, edge_server))
-    #     else:
-    #         yield self.env.process(self.send_to_edge(task, self.edge_servers[action]))
 
     def decide_and_process(self, task, edge_server):
         state = self.get_state(task)
@@ -200,7 +180,7 @@ class CloudEnvironment:
         complexity_state = min(task.complexity - 1, 9)
         priority_state = min(task.priority - 1, 9)
         state = 0
-        for i, load_state in enumerate(load_states):
+        for i, load_state in enumerate(load_states): # if server = 9 that means edge server is full
             state += load_state * (10 ** (4 + i))  # multiple by thousands for each server so we can add another variable state like network state
         state += network_state * 1000 + complexity_state * 10 + priority_state
         return state
@@ -242,6 +222,7 @@ edge_servers = [
     EdgeServer(env, 'EdgeServer1', cloud_env, cpu_power=2.0, memory=8, max_concurrent_tasks=5),
     EdgeServer(env, 'EdgeServer2', cloud_env, cpu_power=2.5, memory=10, max_concurrent_tasks=5),
     EdgeServer(env, 'EdgeServer3', cloud_env, cpu_power=3.0, memory=12, max_concurrent_tasks=5),
+
 ]
 
 # Register edge servers in the cloud environment
@@ -345,7 +326,32 @@ print("\nQ-table:")
 non_zero = np.count_nonzero(cloud_env.rl_agent.q_table)
 print(f"Number of non-zero elements in Q-table: {non_zero}")
 print("Sample of Q-table (first 10 rows, all columns):")
-print(cloud_env.rl_agent.q_table[:10])
+print(cloud_env.rl_agent.q_table[:20])
 
 # Print total reward for RL agent
 #print(f"\nTotal reward for RL agent: {cloud_env.rl_agent.total_reward}")
+
+
+# def update_q_table(self, state, action, reward, next_state):
+#     current_q = self.q_table[state, action]
+#     max_next_q = np.max(self.q_table[next_state])
+#     new_q = current_q + self.learning_rate * (reward + self.discount_factor * max_next_q - current_q)
+#     self.q_table[state, action] = new_q
+#     print(f"Updated Q-value for state {state}, action {action}: {new_q:.2f}")
+
+
+# def decide_and_process(self, task, edge_server):
+#     state = self.get_state(task)
+#     action = self.rl_agent.get_action(state)
+#     # if return 3 so process on cloud else if returns number of servers 0,1,2 it will not process on cloud it is a way to check for process on cloud
+#     if action == len(self.edge_servers):  # Last action corresponds to cloud processing
+#         action_str = "Process on cloud"
+#     else:  # Process on one of the edge servers
+#         action_str = f"Send to {self.edge_servers[action].name}"
+#
+#     self.task_data[-1]["Action"] = action_str   # getting the last added element
+#
+#     if action == len(self.edge_servers):
+#         yield self.env.process(self.process_on_cloud(task, edge_server))
+#     else:
+#         yield self.env.process(self.send_to_edge(task, self.edge_servers[action]))
